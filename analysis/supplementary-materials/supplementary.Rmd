@@ -1,0 +1,519 @@
+---
+title: "Supplement of Sympathetic axonal sprouting induces changes in macrophage populations and protects against pancreatic cancer"
+author:
+  - Guillot et al.:
+      email: 
+      institute: [SEE]
+      correspondence: false
+institute:
+  - SEE: see the original paper
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+    bookdown::word_document2:
+      fig_caption: yes
+      toc: true
+      reference_docx: "../templates/template.docx" # Insert path for the DOCX file
+      df_print: kable
+      pandoc_args:
+      - --lua-filter=../templates/scholarly-metadata.lua
+      - --lua-filter=../templates/author-info-blocks.lua
+      - --lua-filter=../templates/pagebreak.lua
+    md_document:
+      variant: gfm
+      pandoc_args: "--webtex"
+bibliography: references.bib
+fig_width: 6
+fig_height: 4
+csl: "../templates/apa.csl" # Insert path for the bib-style
+abstract: |
+  Statistical analysis of tumor growth with Bioluminescence data. We relied on the population approach with a non-linear mixed effect model in the Bayesian paradigm to set the model we fit to the data.
+keywords: |
+  Bayesian statistics; Non-linear mixed models; Gompertz growth model
+highlights: |
+  These are the highlights. 
+---
+
+<!-- This is the format for text comments that will be ignored during renderings. Do not put R code in these comments because it will not be ignored. -->
+
+<!-- With the following code you can access and display values from the yml header above. -->
+
+Keywords: `r rmarkdown::metadata$keywords`
+
+---
+# Highlights: `r rmarkdown::metadata$highlights`
+---
+<!-- The following code chunk defines some general settings how code chunks should behave. -->
+
+```{r setup, echo = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  echo = TRUE,
+  cache = TRUE,
+  comment = "#>",
+  fig.path = "../figures/",
+  dpi = 300
+)
+
+```
+
+
+<!-- The actual document text starts here: -->
+```{r echo=FALSE}
+suppressMessages(library(BH))
+suppressMessages(library(StanHeaders))
+suppressMessages(library(rstan))
+suppressMessages(library(ggExtra))
+options(mc.cores = max(1, parallel::detectCores()-2))
+suppressMessages(library(tidyverse))
+suppressMessages(library(reshape2))
+library(readxl)
+library(SASmacrophage)
+theme_set(theme_classic() + 
+            theme(legend.position = "bottom", 
+                  legend.box = "horizontal"))
+options(digits = 4)
+```
+
+# Import the data
+
+Data after syngeneic orthotopic transplantation of PK4A-Luc cells:
+```{r}
+expe1 <- read_xlsx(here::here("analysis/data/raw_data/guillot-source-data OK.xlsx"),
+                         sheet = "Figure 9",
+                         range = "Q4:X15")
+expe1 <- long_log_format(expe1)
+```
+
+Data after syngeneic orthotopic transplantation of R211-Luc cells:
+```{r}
+expe2 <- read_xlsx(here::here("analysis/data/raw_data/guillot-source-data OK.xlsx"),
+                         sheet = "Figure 9",
+                         range = "Q21:V28")
+expe2 <- long_log_format(expe2)
+```
+
+Data after transplantation of R211-Luc cells in athymic nude mice: 
+
+```{r}
+expe3 <- read_xlsx(here::here("analysis/data/raw_data/guillot-source-data OK.xlsx"),
+                         sheet = "Figure 9",
+                         range = "Q36:V47")
+expe3 <- long_log_format(expe3)
+```
+
+Each row of these three datasets is composed of:
+
+- `id`: a unique ID of the mouse within the experiment
+- `type`: the treatment received by the mouse
+- `log_y0`: the log-luminescence at time $0$
+- `tps`: time of the observed biolumescence (in days)
+- `log_y`: logarithm of the observed biolumescence.
+
+\newpage
+
+# Gompertz model
+
+The Gompertz model [@hartung2014mathematical] assumes that $y(t)$, the size of the tumor at time $t$ can be explained as
+
+$$
+\log y(t) = \log b + e^{-at}\big(z_0-\log b\big)
+$$
+where:
+
+- $\log b$ is the value of the "plateau", that is to say the limit of $\log y(t)$ when stabilized,
+- $z_0$ is the value at time $t=0$ and 
+- $a$ is a parameter that tunes the approach speed of $\log y(t)$ to the plateau.
+
+The parameters $\log b$ and $a$ prescribe the shape of the growth curves, see the examples below, where we let the value of one of these parameters varies whereas the other are fixed to the same value.
+
+## Examples of Gompertz curves when the value of the plateau $\log b$ changes
+
+```{r Gompertz-log-b, echo = FALSE, out.width="50%", fig.cap="Variability of Gompertz growth curves when $\\log (b)$ changes"}
+par(mar = c(4, 4, 0, 0) + 0.1)
+log_b <- 19
+a <- 0.4
+z0 <- 13
+curve(log_b + exp(-a * x) * (z0 - log_b), 
+        add = FALSE, from = 0, to = 11, col = "red", 
+      xlab = "t", ylab = "log y(t)", 
+      ylim = c(12, 22))
+log_b <- 20
+curve(log_b + exp(-a * x) * (z0 - log_b), 
+        add = TRUE, from = 0, to = 11, col = "chocolate")
+log_b <- 22
+curve(log_b + exp(-a * x) * (z0 - log_b), 
+        add = TRUE, from = 0, to = 11, col = "darkorange4")
+legend("bottomright", legend = c("log(b)=13", "log(b)=20", "log(b)=22"),
+       lty = 1, col = c("red", "chocolate", "darkorange4"))
+```
+
+## Examples of Gompertz curves when the value of the speed $a$ changes
+
+```{r gompertz-a, echo = FALSE, out.width="50%", fig.cap="Variability of Gompertz growth curves when $a$ changes"}
+par(mar = c(4, 4, 0, 0) + 0.1)
+log_b <- 19
+a <- 0.5
+z0 <- 13
+curve(log_b + exp(-a * x) * (z0 - log_b), 
+        add = FALSE, from = 0, to = 11, col = "red", 
+      xlab = "t", ylab = "log y(t)", 
+      ylim = c(12, 22))
+a <- 0.3
+curve(log_b + exp(-a * x) * (z0 - log_b), 
+        add = TRUE, from = 0, to = 11, col = "chocolate")
+a <- 0.15
+curve(log_b + exp(-a * x) * (z0 - log_b), 
+        add = TRUE, from = 0, to = 11, col = "darkorange4")
+legend("bottomright", legend = c("a=0.5", "a=0.3", "a=0.15"),
+       lty = 1, col = c("red", "chocolate", "darkorange4"))
+```
+
+\newpage
+
+# Least square adjustement to the Gompertz model
+
+## Principles
+
+For the $i$-th individual (mouse) of an experiment, we have to estimate the unknown parameter $\theta_i = (\log b_i, z_{0,i}, a_i)$. We drop the data afte time $t=8$ days.
+We begin the statistical study with least square estimates that minimize the following criterion:
+
+$$
+C_i(\theta_i) = \sum_t \frac{\Big(\log b_i + e^{-a_it}\big(z_{0,i}-\log b\big) - y_i(t)\Big)^2}{\lambda_t}
+$$
+All $\lambda_t$ were set to $1$, except the following:
+
+- in the 1st experiment, at time $t=8$, where $\lambda_8=9$ to avoid fitting growth curve at time where we observed  necrosis or hypoxia,
+- in the 2nd experiment, at time $t=0$, where $\lambda_0=9$ because of bad luminescence measure at this time.
+
+The least square estimates are not our final estimates; we expect them be overfitted. Indeed, for each individual in the sample, we have a five measure to recover three unknown paramters.
+
+## Numerical results
+
+```{r}
+par_LS <- least_square(expe1 %>% filter(tps <= 8), 
+                          lambda = c(1, 1, 1, 1, 9))
+par_LS
+```
+
+```{r}
+par_LS2 <- least_square(expe2, lambda = c(9, 1, 1, 1, 1))
+par_LS2
+```
+
+```{r}
+par_LS3 <- least_square(expe3, lambda = c(1, 1, 1, 1, 1))
+par_LS3
+```
+
+## Graphical representation
+
+```{r least-square-plots, out.width="50%"}
+par(mar = c(4, 4, 0, 0) + 0.1)
+plot_LS(expe1 %>% filter(tps <= 8, type == "AA"), 
+             par_LS %>% filter(type == "AA")) + 
+  labs(title = "PK4A-Luc -> Syngeneic, AA")
+plot_LS(expe1 %>% filter(tps <= 8, type == "6-OHDA"), 
+             par_LS %>% filter(type == "6-OHDA")) + 
+  labs(title = "PK4A-Luc -> Syngeneic, 6-OHDA")
+plot_LS(expe2 %>% filter(type == "AA"), 
+             par_LS2 %>% filter(type == "AA")) + 
+  labs(title = "R211-Luc -> Syngeneic, AA")
+plot_LS(expe2 %>% filter(type == "6-OHDA"), 
+             par_LS2 %>% filter(type == "6-OHDA")) + 
+  labs(title = "R211-Luc -> Syngeneic, 6-OHDA")
+plot_LS(expe3 %>% filter(type == "AA"), 
+             par_LS3 %>% filter(type == "AA")) + 
+  labs(title = "R211-Luc -> athymic nude, AA")
+plot_LS(expe3 %>% filter(type == "6-OHDA"), 
+             par_LS3 %>% filter(type == "6-OHDA")) + 
+  labs(title = "R211-Luc -> athymic nude, 6-OHDA")
+```
+
+\newpage
+
+# The Bayesian model
+
+To fit the Gompertz growth curve to the data, we consider a Gaussian additive noise on $\log y(t)$, which is the logarithm of the bioluminescence measure. 
+More precisely, we assume that the difference between $\log y(t)$ and the value at time $t$ of the Gompertz curve is distributed according to a Gaussian centered at $0$. Its variance depends of a $\lambda_{i,j}$-factor which allows us to reduce the influence of a few aberrent data points in the procedure. Thus, except for a few pairs $(i,j)$, $\lambda_{i,j}=1$. 
+
+To explain the growth curve at the individual level, we introduce a non-linear mixed effect model [@lavielle2014mixed]. In the Bayesian paradigm, such models are multilevel or hierarchical models [@gelman2006data]:
+
+- At the measure level, we model the log-bioluminescence data with a Gompertz growth curve specific to each individual (mouse) in the sample.
+- At the group level (either AA or 6-OHDA), we model how the shape of an individual Gompertz growth curve is drawn from priors.
+- At the global, we model how other parameters (such as the initial value) are drawn from priors.
+
+At the **measure level**, we have
+$$
+\log y_i(t_j) = \log b_i + e^{-a_it}\big(z_{0i}-\log b_i\big) + 
+\sqrt{\displaystyle {\lambda_{i,j}}{\sigma^2}} \, \varepsilon_{i,j},
+$$
+where:
+
+- $i$ is an individual (mouse) ID
+- $t_j$ is the $j$-th time of measure
+- $\log y_i(t_j)$ is the log-bioluminescence measure at time $t_j$ on the $i$-th individual
+- $\theta_i=(\log b_i, z_{0i}, a_i)$ is the $i$-th individual parameter of the Gompertz curve
+- $\sigma^2$ is the variance of the measurement error
+- $\lambda_{i,j}$ is a multiplicative factor equal to $1$ except for a few pairs $(i,j)$
+- $\varepsilon_{i,j}$ is a standardized error drawn from the Gaussian $\mathcal N(0,1)$.
+
+For each individual, we have a $3$-dimensional parameter $\theta_i=(\log b_i, z_{0i}, a_i)$ to estimate based on the bioluminescence measures.
+
+At the **group level** (the two groups correspond to the two treatments, either AA or 6-OHDA), we set the following prior.
+For the **plateau**, we have set
+$$
+\overline{\log b}_g \sim \mathcal N(\mu_{b}, \sigma^2_{b}), \quad
+\tau_{b,g}\sim \text{inv}\Gamma(2, 1/m_{b}), \quad
+\Big[\log b_{i} \Big| \overline{\log b}_g, \tau_{b,g}\Big] \sim \mathcal N\Big(\overline{\log b}_{g[i]}, \tau^2_{b,g[i]}\Big).
+$$
+where
+
+- $g = \text{AA or 6-OHDA}$ is a group ID,
+- $i$ is an individual ID,
+- $g[i]$ is the group to which belong the $i$-th individual,
+- $\overline{\log b}_g$ is the average value of the plateau over group $g$,
+- $\tau_{b,g}$ is the standard deviation of the plateau over group $g$,
+- $\mu_{b}, \sigma_{b}^2$ are prior information about the value of $\overline{\log b}_g$,
+- $m_b$ is prior information about the value of $\tau_{b,g}$,
+- $\mathcal N$ is a Gaussian distribution,
+- $\text{inv}\Gamma$ is an inverse Gamma distribution.
+
+Hyperparameters $\mu_{b}$, $\sigma_b^2$ and $m_{b}$ were set to cover values that have meanings for the problem at hand. In particular, due to the few data points at the individual level, the log-likelihood has many modes.  The prior and the chosen values of the hyperparameters allows us to discard uninteresting modes.
+
+For the **speed** to which the curve tends to its plateau, we use the same kind of hierarchical prior, but values of the speed are constrainted to be positive. We set
+$$
+\bar a_g \sim \mathcal N_+(\mu_{a}, \sigma^2_{a}), \quad
+\tau_{a,g} \sim \text{inv}\Gamma(3, 2/m_{a}), \quad
+\Big[a_{i} \Big| a_g, \tau_{a,g}\Big] \sim 
+\mathcal N_+\Big(\bar a_{g[i]}, \tau_{a,g[i]}^2\Big).
+$$
+where
+
+- $g = \text{AA or 6-OHDA}$ is a group ID,
+- $i$ is an individual ID,
+- $g[i]$ is the group to which belong the $i$-th individual,
+- $\bar{a}_g$ is the average value of the speed over group $g$,
+- $\tau_{a,g}$ is the standard deviation of the speed over group $g$,
+- $\mu_{a}, \sigma_{a}^2$ are prior information about the value of $\bar{a}_g$,
+- $m_a$ is prior information about the value of $\tau_{a,g}$,
+- $\mathcal N_+$ is a Gaussian distribution constrained to be positive,
+- $\text{inv}\Gamma$ is an inverse Gamma distribution.
+
+**Remark.** The prior information we set with the hyperparameters $\mu_{b}, \sigma_{b}^2, m_b, \mu_{a}, \sigma_{a}^2, m_a$ regarding the average shape of the growth curve at the group level is exactly the same for both groups (AA and 6_OHDA).
+
+At the **global level**, we set the following prior.
+We set the following prior on $\sigma^2$, the error variance:
+
+$$
+\pi(\sigma^2) \propto e^{-\sigma^4/\sigma_\text{max}^4} \ \mathbf 1\{0\le\sigma\le \sigma_\text{max}\}
+$$
+where
+
+- $\pi(\sigma^2)$ is the prior density,
+- $\propto$ means proportial to, up to number that does not depend on $\sigma$,
+- $\sigma_\text{max}$ is a prior bound.
+
+
+Regarding the **initial values** $z_{0i}$, we rely on a hierarchical prior that does not distinguish between both groups (AA or 6-OHDA) since we do not expect any difference here. Thus
+$$
+\bar z_0 \sim \mathcal N_+(\mu_{0}, \sigma^2_{0}), \quad
+\tau_{0} \sim \text{inv}\Gamma(2, 1/m_{0}), \quad
+\Big[z_{0,i} \Big| \bar z_0, \tau_0 \Big]\sim \mathcal N_+(\bar z_0, \tau_{0}^2)
+$$
+where
+
+- $i$ is an individual ID,
+- $\bar z_0$ is the average  of the initial value over the whole population,
+- $\tau_{0}$ is the standard deviation of the initial value over the population,
+- $\mu_{0}, \sigma_{0}^2$ are prior information about the value of $\bar z_0$,
+- $m_0$ is prior information about the value of $\tau_{0}$,
+- $\mathcal N_+$ is a Gaussian distribution constrained to be positive,
+- $\text{inv}\Gamma$ is an inverse Gamma distribution.
+
+\newpage
+
+# Fitting the Bayesian model
+
+## Remove the influence of bad measure
+
+The default value of $\lambda_{i,j}$ is set to $1$, except for a few measures.
+
+```{r}
+expe1 <- expe1 %>% mutate(lambda = 1) %>% filter(tps <=9)
+expe2 <- expe2 %>% mutate(lambda = 1)
+expe3 <- expe3 %>% mutate(lambda = 1)
+```
+
+A few observed values $\log y_i(t_j)$ are far from the Gompertz curve fitted by minimizing least square. 
+
+```{r}
+change_lambda1 <- tibble(
+  id = c(1, 3, 4, 6, 11), tps = c(8, 8, 8, 8, 8),
+  lambda = c(5, 5, 5, 5, 5)^2
+)
+change_lambda2 <- tibble(id = c(3, 4), tps = c(0, 0), lambda = c(5, 5)^2)
+change_lambda3 <- tibble(id = c(4,  11), tps = c(4, 4), lambda = c(5, 5)^2)
+expe1 <- expe1 %>% correct_lambda(change_lambda1)
+expe2 <- expe2 %>% correct_lambda(change_lambda2)
+expe3 <- expe3 %>% correct_lambda(change_lambda3)
+```
+
+
+## Samples from the posterior distributions
+
+We used Stan, see [https://mc-stan.org] and [@carpenter2017stan], to sample the posterior distribution. 
+
+```{r compile-stan-bis, eval=FALSE}
+bayes_model <- stan_model(file = here::here("stan/modele_z0global.stan"))
+```
+
+
+```{r compile-stan, include=FALSE}
+bayes_model <- stan_model(file = here::here("stan/modele_z0global.stan"))
+```
+
+To avoid been trapped around a low probability mode of the posterior, we start all MCMC algorithms with the least square estimates.
+
+```{r stan-fit1}
+data1 <- set_data(expe1)
+fit1 <- sampling(bayes_model, data = data1,
+                 chains = 4, iter = 10000,
+                 init = function(...) init_fun(par_LS, data1,...),
+                 refresh = 0,
+                 control = list(adapt_delta = 0.8, max_treedepth = 10))
+```
+
+```{r stan-fit2}
+data2 <- set_data(expe2)
+fit2 <- sampling(bayes_model, data = data2,
+                 chains = 4, iter = 10000,
+                 init = function(...) init_fun(par_LS2, data2,...),
+                 refresh = 0,
+                 control = list(adapt_delta = 0.8, max_treedepth = 10))
+```
+
+```{r stan-fit3}
+data3 <- set_data(expe3)
+fit3 <- sampling(bayes_model, data = data3,
+                 chains = 4, iter = 10000,
+                 init = function(...) init_fun(par_LS3, data3,...),
+                 refresh = 0,
+                 control = list(adapt_delta = 0.8, max_treedepth = 10))
+```
+
+## Reproduce Figures 9E and 9F of the paper
+
+We can plot the credibility envelop of the growth curve using parameters drawn from the posterior distribution.
+
+```{r Fig9E, out.width="50%", fig.cap="This is Fig. 9E of the original paper"}
+print(envelop(fit1, expe1 %>% filter(tps <= 9), id = 3, ci_level = 0.5,
+              t = seq(0, 9, length.out = 101), color = "#000000"))
+```
+
+```{r Fig9F, out.width="50%", fig.cap="This is Fig. 9F of the original paper"}
+print(envelop(fit1, expe1 %>% filter(tps <= 9), id = 8, ci_level = 0.5,
+              t = seq(0, 9, length.out = 101), color = "#4B8EC7"))
+```
+
+## Summarize the posterior samples
+
+### PK4A-Luc $\to$ Syngeneic
+
+```{r}
+mysummary(fit1, pars = c("z0bar", "tau0", "z0"))
+mysummary(fit1, pars = c("log_bbar", "taub", "log_b"))
+mysummary(fit1, pars = c("abar", "taua", "a"))
+```
+
+### R211-Luc $\to$ Syneneic
+
+```{r}
+mysummary(fit2, pars = c("z0bar", "tau0", "z0"))
+mysummary(fit2, pars = c("log_bbar", "taub", "log_b"))
+mysummary(fit2, pars = c("abar", "taua", "a"))
+```
+
+### R211-Luc $\to$ Athymic nude
+
+```{r}
+mysummary(fit3, pars = c("z0bar", "tau0", "z0"))
+mysummary(fit3, pars = c("log_bbar", "taub", "log_b"))
+mysummary(fit3, pars = c("abar", "taua", "a"))
+```
+
+## Represent the posterior distibutions
+
+### Reproduce Figure 9G
+
+```{r Fig9G, warning=FALSE, out.width="50%", fig.cap="This is Fig. 9G of the original paper"}
+print(compare_type(fit1, xlim = c(17, 31), ylim = c(0, 0.45)))
+```
+
+The posterior probability that $\bar a_\text{AA}>\bar a_\text{6-OHDA}$ is:
+
+```{r}
+postdata1 <- as.data.frame(fit1, pars = c("abar", "log_bbar"))
+mean(postdata1$`abar[1]` > postdata1$`abar[2]`)
+```
+
+The posterior probability that $\overline{\log b}_\text{AA}<\overline{\log b}_\text{6-OHDA}$ is:
+
+```{r}
+mean(postdata1$`log_bbar[1]` < postdata1$`log_bbar[2]`)
+```
+
+
+### Reproduce Figure 9H
+
+```{r Fig9H, warning=FALSE, out.width="50%", fig.cap="This is Fig. 9H of the orignal paper"}
+print(compare_type(fit2, xlim = c(12, 40), ylim = c(0, 0.5)))
+```
+The posterior probability that $\bar a_\text{AA}>\bar a_\text{6-OHDA}$ is:
+
+```{r}
+postdata2 <- as.data.frame(fit2, pars = c("abar", "log_bbar"))
+mean(postdata2$`abar[1]` > postdata2$`abar[2]`)
+```
+
+The posterior probability that $\overline{\log b}_\text{AA}<\overline{\log b}_\text{6-OHDA}$ is:
+
+```{r}
+mean(postdata2$`log_bbar[1]` < postdata2$`log_bbar[2]`)
+```
+
+
+
+### Reproduce Figure 9I
+
+```{r Fig9I, warning=FALSE, out.width="50%", fig.cap="This is Fig. 9I of the original paper"}
+compare_type(fit3, xlim = c(12, 40), ylim = c(0, 0.5))
+```
+
+The posterior probability that $\bar a_\text{AA}>\bar a_\text{6-OHDA}$ is:
+
+```{r}
+postdata3 <- as.data.frame(fit3, pars = c("abar", "log_bbar"))
+mean(postdata3$`abar[1]` > postdata3$`abar[2]`)
+```
+
+The posterior probability that $\overline{\log b}_\text{AA}<\overline{\log b}_\text{6-OHDA}$ is:
+
+```{r}
+mean(postdata3$`log_bbar[1]` < postdata3$`log_bbar[2]`)
+```
+
+
+
+
+<!-- The following line inserts a page break  -->
+\newpage
+
+# References 
+
+<!-- The following line ensures the references appear here for the MS Word or HTML output files, rather than right at the end of the document (this will not work for PDF files):  -->
+
+<div id="refs"></div>
+
+

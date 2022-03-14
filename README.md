@@ -36,15 +36,15 @@ installed on your computer the [R
 software](https://cloud.r-project.org/) itself and optionally [RStudio
 Desktop](https://rstudio.com/products/rstudio/download/).
 
-You can download the compendium as a zip from from this URL:
-[master.zip](/archive/master.zip). After unzipping:
+You can download the compendium as a zip with GitHub. After unzipping:
 
--   open the `.Rproj` file in RStudio
+-   open the `SASmacrophage.Rproj` file in RStudio
 -   run `devtools::install()` to ensure you have the packages this
     analysis depends on (also listed in the [DESCRIPTION](/DESCRIPTION)
     file).
--   finally, open `analysis/paper/paper.Rmd` and knit to produce the
-    `paper.docx`, or run `rmarkdown::render("analysis/paper/paper.Rmd")`
+-   finally, open `analysis/supplementary-materials/supplementary.Rmd`
+    and knit to produce the `supplementary.docx`, or run
+    `rmarkdown::render("analysis/supplementary-materials/supplementary.Rmd")`
     in the R console
 
 ### Licenses
