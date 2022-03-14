@@ -12,15 +12,6 @@ data of our paper:
 > in macrophage populations and protects against pancreatic cancer. To
 > be published in *Nature Communications* <https://doi.org/xxx/xxx>
 
-### How to cite
-
-Please cite this compendium as:
-
-> Authors, (2022). *Compendium of R code and data for Sympathetic axonal
-> sprouting induces changes in macrophage populations and protects
-> against pancreatic cancer*. Accessed 14 Mar 2022. Online at
-> <https://doi.org/xxx/xxx>
-
 ## Contents
 
 The **analysis** directory contains:
