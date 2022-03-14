@@ -38,7 +38,7 @@ Please cite this compendium as:
 
 The **analysis** directory contains:
 
-  - [:file\_folder: supplementary_material](/analysis/supplementary_material): 
+  - [:file\_folder: supplementary_materials](/analysis/supplementary_materials): 
     R Markdown source document
     providing the whole pipeline of analysis of the bioluminescence data leading
     to Figures 9E-9I of the paper. 
